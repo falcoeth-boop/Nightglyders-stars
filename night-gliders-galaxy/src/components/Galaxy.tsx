@@ -5,78 +5,105 @@ import * as THREE from "three";
 
 type Star = { id: string; x: number; y: number; z: number };
 
-function StarMesh({ pos }: { pos: [number, number, number] }) {
-  const ref = useRef<THREE.Points>(null);
-  const speed = useMemo(() => 0.001 + Math.random() * 0.003, []);
+/** Create a radial-gradient halo texture once (no external deps) */
+function useHaloTexture(color = "#a78bfa") {
+  return useMemo(() => {
+    const size = 256;
+    const c = document.createElement("canvas");
+    c.width = c.height = size;
+    const g = c.getContext("2d")!;
+    const grad = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    // center bright, smooth falloff
+    grad.addColorStop(0.0, `${color}`);
+    grad.addColorStop(0.15, `${color}`);
+    grad.addColorStop(0.35, "rgba(167,139,250,0.65)");
+    grad.addColorStop(0.6, "rgba(167,139,250,0.2)");
+    grad.addColorStop(1.0, "rgba(167,139,250,0.0)");
+    g.fillStyle = grad;
+    g.fillRect(0, 0, size, size);
+    const tex = new THREE.CanvasTexture(c);
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.generateMipmaps = false;
+    return tex;
+  }, [color]);
+}
+
+function HeroStar({ pos }: { pos: [number, number, number] }) {
+  const ref = useRef<THREE.Sprite>(null);
+  const texture = useHaloTexture("#c4b5fd"); // soft violet
+
+  // gentle drift + breathing pulse
+  const base = useMemo(() => new THREE.Vector3(...pos), [pos]);
+  const speed = useMemo(() => 0.3 + Math.random() * 0.4, []);
+  const phase = useMemo(() => Math.random() * Math.PI * 2, []);
   useFrame(({ clock }) => {
     if (!ref.current) return;
-    const t = clock.getElapsedTime() * speed;
-    ref.current.position.x = pos[0] + Math.sin(t + pos[1]) * 0.5;
-    ref.current.position.y = pos[1] + Math.sin(t + pos[2]) * 0.3;
-    ref.current.position.z = pos[2] + Math.cos(t + pos[0]) * 0.5;
+    const t = clock.getElapsedTime();
+    ref.current.position.set(
+      base.x + Math.sin(t * 0.25 + base.y) * 0.6,
+      base.y + Math.sin(t * 0.33 + base.z) * 0.4,
+      base.z + Math.cos(t * 0.22 + base.x) * 0.6
+    );
+    const s = 1.2 + Math.sin(t * speed + phase) * 0.25; // breathe
+    ref.current.scale.setScalar(s);
+    (ref.current.material as THREE.SpriteMaterial).opacity = 0.9;
   });
 
-  const geom = useMemo(
+  const material = useMemo(
     () =>
-      new THREE.BufferGeometry().setAttribute(
-        "position",
-        new THREE.Float32BufferAttribute([0, 0, 0], 3)
-      ),
-    []
-  );
-
-  const mat = useMemo(
-    () =>
-      new THREE.PointsMaterial({
-        size: 0.12,
-        sizeAttenuation: true,
+      new THREE.SpriteMaterial({
+        map: texture,
+        color: new THREE.Color("#ffffff"),
         transparent: true,
-        opacity: 0.95,
+        depthWrite: false,
+        depthTest: true,
+        blending: THREE.AdditiveBlending,
       }),
-    []
+    [texture]
   );
 
-  return <points ref={ref} geometry={geom} material={mat} position={pos} />;
+  return <sprite ref={ref} material={material} position={pos} scale={[1.4, 1.4, 1.4]} />;
 }
 
 export default function Galaxy({ stars = [] }: { stars?: Star[] }) {
   const bg = "#030510";
 
-  // If no stars were passed, show a small fallback cluster so the scene isn't empty.
+  // Fallback cluster if none provided (so scene isn't empty during first load)
   const fallback: Star[] = useMemo(
     () =>
-      Array.from({ length: 12 }, (_, i) => ({
+      Array.from({ length: 6 }, (_, i) => ({
         id: `fallback-${i}`,
-        x: (Math.random() * 2 - 1) * 8,
-        y: (Math.random() * 2 - 1) * 4,
-        z: (Math.random() * 2 - 1) * 8,
+        x: (Math.random() * 2 - 1) * 4,
+        y: (Math.random() * 2 - 1) * 2.2,
+        z: (Math.random() * 2 - 1) * 4,
       })),
     []
   );
 
-  // Scale input coordinates up so mock stars are clearly visible
+  // Scale & lift hero stars so they stand proud of the background field
   const display = (stars.length ? stars : fallback).map((s) => ({
     ...s,
-    x: s.x * 8,
-    y: s.y * 8,
-    z: s.z * 8,
+    x: s.x * 10,
+    y: s.y * 10,
+    z: s.z * 10,
   }));
 
   return (
     <Canvas
-      camera={{ position: [0, 15, 40], fov: 65 }}
+      camera={{ position: [0, 10, 36], fov: 60 }}
       style={{ position: "fixed", inset: 0, background: bg }}
     >
       <color attach="background" args={[bg]} />
-      <ambientLight intensity={0.3} />
-      <pointLight position={[20, 30, 10]} intensity={1.2} />
+      <ambientLight intensity={0.35} />
+      <pointLight position={[20, 30, 10]} intensity={1.1} />
 
-      {/* background starfield */}
-      <Stars radius={300} depth={80} count={8000} factor={4} saturation={0} fade />
-      <Sparkles count={200} scale={[300, 100, 300]} size={2} speed={0.2} />
+      {/* Softer, less busy background so hero stars pop */}
+      <Stars radius={250} depth={70} count={3000} factor={3.5} saturation={0} fade />
+      <Sparkles count={120} scale={[260, 90, 260]} size={2} speed={0.18} />
 
       {display.map((s) => (
-        <StarMesh key={s.id} pos={[s.x, s.y, s.z]} />
+        <HeroStar key={s.id} pos={[s.x, s.y, s.z]} />
       ))}
 
       <OrbitControls enablePan={false} minDistance={10} maxDistance={120} />
