@@ -1,6 +1,6 @@
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Stars, OrbitControls, Sparkles } from "@react-three/drei";
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 
 type Star = { id: string; x: number; y: number; z: number };
@@ -13,7 +13,6 @@ function useHaloTexture(color = "#a78bfa") {
     c.width = c.height = size;
     const g = c.getContext("2d")!;
     const grad = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-    // center bright, smooth falloff
     grad.addColorStop(0.0, `${color}`);
     grad.addColorStop(0.15, `${color}`);
     grad.addColorStop(0.35, "rgba(167,139,250,0.65)");
@@ -33,6 +32,13 @@ function HeroStar({ pos }: { pos: [number, number, number] }) {
   const ref = useRef<THREE.Sprite>(null);
   const texture = useHaloTexture("#c4b5fd"); // soft violet
 
+  // keep sprites always visible & rendered last
+  useEffect(() => {
+    if (!ref.current) return;
+    ref.current.frustumCulled = false; // never culled when off-axis
+    ref.current.renderOrder = 9999;    // draw after background
+  }, []);
+
   // gentle drift + breathing pulse
   const base = useMemo(() => new THREE.Vector3(...pos), [pos]);
   const speed = useMemo(() => 0.3 + Math.random() * 0.4, []);
@@ -45,25 +51,26 @@ function HeroStar({ pos }: { pos: [number, number, number] }) {
       base.y + Math.sin(t * 0.33 + base.z) * 0.4,
       base.z + Math.cos(t * 0.22 + base.x) * 0.6
     );
-    const s = 1.2 + Math.sin(t * speed + phase) * 0.25; // breathe
+    const s = 1.8 + Math.sin(t * speed + phase) * 0.35; // a bit bigger
     ref.current.scale.setScalar(s);
-    (ref.current.material as THREE.SpriteMaterial).opacity = 0.9;
+    (ref.current.material as THREE.SpriteMaterial).opacity = 0.95;
   });
 
+  // IMPORTANT: depthTest=false & depthWrite=false so they render on top
   const material = useMemo(
     () =>
       new THREE.SpriteMaterial({
         map: texture,
         color: new THREE.Color("#ffffff"),
         transparent: true,
-        depthWrite: false,
-        depthTest: true,
+        depthTest: false,          // <- always visible over starfield
+        depthWrite: false,         // <- don't affect depth buffer
         blending: THREE.AdditiveBlending,
       }),
     [texture]
   );
 
-  return <sprite ref={ref} material={material} position={pos} scale={[1.4, 1.4, 1.4]} />;
+  return <sprite ref={ref} material={material} position={pos} scale={[2, 2, 2]} />;
 }
 
 export default function Galaxy({ stars = [] }: { stars?: Star[] }) {
@@ -99,7 +106,7 @@ export default function Galaxy({ stars = [] }: { stars?: Star[] }) {
       <pointLight position={[20, 30, 10]} intensity={1.1} />
 
       {/* Softer, less busy background so hero stars pop */}
-      <Stars radius={250} depth={70} count={3000} factor={3.5} saturation={0} fade />
+      <Stars radius={230} depth={70} count={2500} factor={3.2} saturation={0} fade />
       <Sparkles count={120} scale={[260, 90, 260]} size={2} speed={0.18} />
 
       {display.map((s) => (
