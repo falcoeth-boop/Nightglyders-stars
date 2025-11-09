@@ -3,9 +3,11 @@ import { Stars, OrbitControls, Sparkles } from "@react-three/drei";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
 
+type Star = { id: string; x: number; y: number; z: number };
+
 function StarMesh({ pos }: { pos: [number, number, number] }) {
   const ref = useRef<THREE.Points>(null);
-  const speed = useMemo(() => 0.001 + Math.random()*0.003, []);
+  const speed = useMemo(() => 0.001 + Math.random() * 0.003, []);
   useFrame(({ clock }) => {
     if (!ref.current) return;
     const t = clock.getElapsedTime() * speed;
@@ -13,23 +15,70 @@ function StarMesh({ pos }: { pos: [number, number, number] }) {
     ref.current.position.y = pos[1] + Math.sin(t + pos[2]) * 0.3;
     ref.current.position.z = pos[2] + Math.cos(t + pos[0]) * 0.5;
   });
-  const geom = useMemo(() => new THREE.BufferGeometry().setAttribute(
-    "position", new THREE.Float32BufferAttribute([0,0,0], 3)
-  ), []);
-  const mat = useMemo(() => new THREE.PointsMaterial({ size: 0.08, sizeAttenuation: true, transparent: true, opacity: 0.95 }), []);
+
+  const geom = useMemo(
+    () =>
+      new THREE.BufferGeometry().setAttribute(
+        "position",
+        new THREE.Float32BufferAttribute([0, 0, 0], 3)
+      ),
+    []
+  );
+
+  const mat = useMemo(
+    () =>
+      new THREE.PointsMaterial({
+        size: 0.12,
+        sizeAttenuation: true,
+        transparent: true,
+        opacity: 0.95,
+      }),
+    []
+  );
+
   return <points ref={ref} geometry={geom} material={mat} position={pos} />;
 }
 
-export default function Galaxy({ stars }: { stars: { x:number;y:number;z:number; id:string }[] }) {
+export default function Galaxy({ stars = [] }: { stars?: Star[] }) {
   const bg = "#030510";
+
+  // If no stars were passed, show a small fallback cluster so the scene isn't empty.
+  const fallback: Star[] = useMemo(
+    () =>
+      Array.from({ length: 12 }, (_, i) => ({
+        id: `fallback-${i}`,
+        x: (Math.random() * 2 - 1) * 8,
+        y: (Math.random() * 2 - 1) * 4,
+        z: (Math.random() * 2 - 1) * 8,
+      })),
+    []
+  );
+
+  // Scale input coordinates up so mock stars are clearly visible
+  const display = (stars.length ? stars : fallback).map((s) => ({
+    ...s,
+    x: s.x * 8,
+    y: s.y * 8,
+    z: s.z * 8,
+  }));
+
   return (
-    <Canvas camera={{ position: [0, 15, 40], fov: 65 }} style={{ position: "fixed", inset: 0, background: bg }}>
+    <Canvas
+      camera={{ position: [0, 15, 40], fov: 65 }}
+      style={{ position: "fixed", inset: 0, background: bg }}
+    >
       <color attach="background" args={[bg]} />
       <ambientLight intensity={0.3} />
       <pointLight position={[20, 30, 10]} intensity={1.2} />
+
+      {/* background starfield */}
       <Stars radius={300} depth={80} count={8000} factor={4} saturation={0} fade />
       <Sparkles count={200} scale={[300, 100, 300]} size={2} speed={0.2} />
-      {stars.map(s => <StarMesh key={s.id} pos={[s.x, s.y, s.z]} />)}
+
+      {display.map((s) => (
+        <StarMesh key={s.id} pos={[s.x, s.y, s.z]} />
+      ))}
+
       <OrbitControls enablePan={false} minDistance={10} maxDistance={120} />
     </Canvas>
   );
