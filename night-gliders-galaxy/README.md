@@ -1,6 +1,6 @@
 # Night Gliders — Galaxy
 
-3D galaxy + wallet connect. Shows your **unlisted NightGlyders** as moving stars and accrues **Night Aura** daily by tier.
+3D galaxy + wallet connect. Shows your **unlisted NightGlyders** as moving stars and accrues **Night Aura** daily by tier..
 
 ## Quick Start
 1. Copy `.env.local.example` to `.env.local` and fill values.
